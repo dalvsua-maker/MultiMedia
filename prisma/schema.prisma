@@ -1,0 +1,160 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
+}
+
+enum TipoContenido {
+  pelicula
+  serie
+  videojuego
+  musica
+}
+
+enum FuenteExterna {
+  tmdb
+  igdb
+  spotify
+}
+
+enum EstadoContenido {
+  pendiente
+  en_proceso
+  visto
+}
+
+enum EstadoComparticion {
+  pendiente
+  aceptada
+  rechazada
+}
+
+model Usuario {
+  id                      String             @id @default(uuid()) @db.Uuid
+  nombre                  String             @db.VarChar(100)
+  email                   String             @unique @db.VarChar(255)
+  passwordHash            String             @map("password_hash") @db.VarChar(255)
+  fechaRegistro           DateTime           @default(now()) @map("fecha_registro") @db.Timestamptz
+  listas                  Lista[]
+  usuarioContenidos       UsuarioContenido[]
+  comparticionesEnviadas  Comparticion[]     @relation("Origen")
+  comparticionesRecibidas Comparticion[]     @relation("Destino")
+
+  @@map("usuarios")
+}
+
+model Contenido {
+  id                String             @id @default(uuid()) @db.Uuid
+  tipo              TipoContenido
+  titulo            String             @db.VarChar(255)
+  imagenUrl         String?            @map("imagen_url") @db.Text
+  fuenteExterna     FuenteExterna      @map("fuente_externa")
+  idExterno         String             @map("id_externo") @db.VarChar(100)
+  fechaAnadido      DateTime           @default(now()) @map("fecha_anadido") @db.Timestamptz
+  detallePelicula   DetallePelicula?
+  detalleSerie      DetalleSerie?
+  detalleVideojuego DetalleVideojuego?
+  detalleMusica     DetalleMusica?
+  listas            ListaContenido[]
+  usuarios          UsuarioContenido[]
+  comparticiones    Comparticion[]
+
+  @@unique([fuenteExterna, idExterno])
+  @@index([tipo])
+  @@map("contenidos")
+}
+
+model DetallePelicula {
+  contenidoId String    @id @map("contenido_id") @db.Uuid
+  duracionMin Int?      @map("duracion_min")
+  director    String?   @db.VarChar(255)
+  anio        Int?
+  contenido   Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@map("detalle_peliculas")
+}
+
+model DetalleSerie {
+  contenidoId   String    @id @map("contenido_id") @db.Uuid
+  numTemporadas Int?      @map("num_temporadas")
+  numEpisodios  Int?      @map("num_episodios")
+  anioInicio    Int?      @map("anio_inicio")
+  contenido     Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@map("detalle_series")
+}
+
+model DetalleVideojuego {
+  contenidoId     String    @id @map("contenido_id") @db.Uuid
+  plataformas     String[]  @db.Text
+  desarrollador   String?   @db.VarChar(255)
+  anioLanzamiento Int?      @map("anio_lanzamiento")
+  contenido       Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@map("detalle_videojuegos")
+}
+
+model DetalleMusica {
+  contenidoId String    @id @map("contenido_id") @db.Uuid
+  artista     String?   @db.VarChar(255)
+  album       String?   @db.VarChar(255)
+  duracionSeg Int?      @map("duracion_seg")
+  contenido   Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@map("detalle_musica")
+}
+
+model Lista {
+  id            String           @id @default(uuid()) @db.Uuid
+  usuarioId     String           @map("usuario_id") @db.Uuid
+  nombre        String           @db.VarChar(100)
+  descripcion   String?          @db.Text
+  fechaCreacion DateTime         @default(now()) @map("fecha_creacion") @db.Timestamptz
+  usuario       Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenidos    ListaContenido[]
+
+  @@map("listas")
+}
+
+model ListaContenido {
+  listaId      String    @map("lista_id") @db.Uuid
+  contenidoId  String    @map("contenido_id") @db.Uuid
+  fechaAnadido DateTime  @default(now()) @map("fecha_anadido") @db.Timestamptz
+  lista        Lista     @relation(fields: [listaId], references: [id], onDelete: Cascade)
+  contenido    Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([listaId, contenidoId])
+  @@map("lista_contenido")
+}
+
+model UsuarioContenido {
+  usuarioId          String          @map("usuario_id") @db.Uuid
+  contenidoId        String          @map("contenido_id") @db.Uuid
+  estado             EstadoContenido @default(pendiente)
+  fechaActualizacion DateTime        @default(now()) @map("fecha_actualizacion") @db.Timestamptz
+  usuario            Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido          Contenido       @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, contenidoId])
+  @@index([usuarioId])
+  @@map("usuario_contenido")
+}
+
+model Comparticion {
+  id               String             @id @default(uuid()) @db.Uuid
+  contenidoId      String             @map("contenido_id") @db.Uuid
+  usuarioOrigenId  String             @map("usuario_origen_id") @db.Uuid
+  usuarioDestinoId String             @map("usuario_destino_id") @db.Uuid
+  estado           EstadoComparticion @default(pendiente)
+  fechaEnvio       DateTime           @default(now()) @map("fecha_envio") @db.Timestamptz
+  contenido        Contenido          @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+  usuarioOrigen    Usuario            @relation("Origen", fields: [usuarioOrigenId], references: [id], onDelete: Cascade)
+  usuarioDestino   Usuario            @relation("Destino", fields: [usuarioDestinoId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioDestinoId, estado])
+  @@unique([usuarioOrigenId, usuarioDestinoId, contenidoId], where: { estado: "pendiente" })
+  @@map("comparticiones")
+}
