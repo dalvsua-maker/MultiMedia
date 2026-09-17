@@ -257,20 +257,17 @@ export default function DashboardPage() {
     }
 
     // no_me_gusta / ya_lo_vi: persiste inmediato, oculta tarjeta, toast con Deshacer 5s
-    // guardar posición para deshacer sin refetch
-    let tipoKey = "" as string;
+    // guardar posición para deshacer sin refetch — lectura síncrona (evita side-effect dentro de setState que es asíncrono/batcheado en React 18)
+    let tipoKey: string = card.tipo;
     let idx = -1;
-    setRecomendacionesPorTipo((prev) => {
-      for (const k of Object.keys(prev) as Array<keyof typeof prev>) {
-        const i = prev[k].findIndex((x) => x.id === card.id);
-        if (i !== -1) {
-          tipoKey = k;
-          idx = i;
-          break;
-        }
+    for (const [k, arr] of Object.entries(recomendacionesPorTipo) as Array<[string, Card[]]>) {
+      const i = arr.findIndex((x) => x.id === card.id);
+      if (i !== -1) {
+        tipoKey = k;
+        idx = i;
+        break;
       }
-      return prev;
-    });
+    }
     removedRef.current = { card, tipo: tipoKey, index: idx };
 
     // optimistic remove
@@ -290,16 +287,19 @@ export default function DashboardPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // rollback: reinsertar
+        // rollback: reinsertar — defensivo contra tipo vacío/inexistente
         if (removedRef.current) {
           const { card: c, tipo, index } = removedRef.current;
-          setRecomendacionesPorTipo((prev) => {
-            const next = { ...prev };
-            const arr = [...next[tipo as keyof typeof next]];
-            arr.splice(index >= 0 ? index : arr.length, 0, c);
-            (next as Record<string, Card[]>)[tipo] = arr;
-            return next;
-          });
+          const tipoSafe = (tipo || c.tipo) as string;
+          if (tipoSafe) {
+            setRecomendacionesPorTipo((prev) => {
+              const next = { ...prev };
+              const arr = [...((next as Record<string, Card[]>)[tipoSafe] ?? [])];
+              arr.splice(index >= 0 ? index : arr.length, 0, c);
+              (next as Record<string, Card[]>)[tipoSafe] = arr;
+              return next;
+            });
+          }
         }
         throw new Error((data as { error?: string }).error ?? "No se pudo guardar feedback");
       }
@@ -328,15 +328,18 @@ export default function DashboardPage() {
       if (!res.ok) {
         throw new Error((data as { error?: string }).error ?? "No se pudo deshacer");
       }
-      // éxito: reinsertar tarjeta en posición original
+      // éxito: reinsertar tarjeta en posición original — defensivo
       const { tipo, index } = removedRef.current;
-      setRecomendacionesPorTipo((prev) => {
-        const next = { ...prev };
-        const arr = [...next[tipo as keyof typeof next]];
-        arr.splice(index >= 0 ? index : arr.length, 0, card);
-        (next as Record<string, Card[]>)[tipo] = arr;
-        return next;
-      });
+      const tipoSafe = (tipo || card.tipo) as string;
+      if (tipoSafe) {
+        setRecomendacionesPorTipo((prev) => {
+          const next = { ...prev };
+          const arr = [...((next as Record<string, Card[]>)[tipoSafe] ?? [])];
+          arr.splice(index >= 0 ? index : arr.length, 0, card);
+          (next as Record<string, Card[]>)[tipoSafe] = arr;
+          return next;
+        });
+      }
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       setToast(null);
       removedRef.current = null;

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-18
+
+### Fixed
+- **Dashboard — “No me gusta / Ya lo vi” TypeError** (`src/app/dashboard/page.tsx:259-342`): `handleFeedback` obtenía `tipoKey` con side-effect dentro de `setRecomendacionesPorTipo(prev => side-effect)` que en React 18 es batcheado/asíncrono → `tipoKey=""` → rollback/deshacer hacía `[...next[""]]` (`undefined`) → `TypeError: next[tipo] is not iterable`. Fix profesional: lectura síncrona `for (const [k,arr] of Object.entries(recomendacionesPorTipo))` con fallback `card.tipo`, y reinserción defensiva `...((next as Record<string,Card[]>)[tipoSafe] ?? [])` con `tipoSafe = tipo || c.tipo` + guard `if(tipoSafe)` en `handleFeedback` rollback (`298`) y `handleDeshacer` (`335`). Verificado `npx eslint src/app/dashboard/page.tsx` 0 errores, `npm run build` OK.
+- **API — `POST /api/recomendaciones/feedback 500` para los 3 votos** (`src/application/use-cases/GestionarFeedbackRecomendacion.ts:23`): `TypeError: Cannot read properties of undefined (reading 'upsert')` porque `prisma.recomendacionFeedback` no existía en runtime — cliente `@prisma/client 7.10` desincronizado tras añadir `RecomendacionFeedback`/`VotoRecomendacion` en `20250917000000_add_historial_y_feedback` (`prisma/schema.prisma:187-198`). `postinstall` solo hace `prisma skills sync`. Fix: `npx prisma generate` (verificado `has recomendacionFeedback: object`, `upsert: function`, Neon `recomendacion_feedback` + enum ok) + reinicio `next dev` (Turbopack caché). `npx prisma migrate status` ya `up to date`, `npm test` 217 passed | 1 skipped. Operativo: `me_gusta`/`no_me_gusta`/`ya_lo_vi` + `DELETE /feedback/:cid` + `Deshacer 5s`.
+
 ## [0.2.1] - 2026-09-18
 
 ### Fixed
