@@ -18,6 +18,8 @@ interface TmdbMovie {
   poster_path: string | null;
   release_date: string;
   overview: string;
+  popularity: number;
+  vote_average: number;
 }
 
 interface TmdbTv {
@@ -26,6 +28,8 @@ interface TmdbTv {
   poster_path: string | null;
   first_air_date: string;
   overview: string;
+  popularity: number;
+  vote_average: number;
 }
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
@@ -42,6 +46,8 @@ function mapMovie(m: TmdbMovie): ResultadoBusqueda {
     metadatos: {
       fecha: m.release_date,
       overview: m.overview,
+      popularity: m.popularity,
+      vote_average: m.vote_average,
     },
   };
 }
@@ -58,6 +64,8 @@ function mapTv(t: TmdbTv): ResultadoBusqueda {
     metadatos: {
       fecha: t.first_air_date,
       overview: t.overview,
+      popularity: t.popularity,
+      vote_average: t.vote_average,
     },
   };
 }
@@ -86,6 +94,40 @@ export class TmdbAdapter implements IExternalSearchService {
       results?: unknown[];
     };
     const results = (data.results ?? []).slice(0, 10) as
+      | TmdbMovie[]
+      | TmdbTv[];
+
+    if (tipo === "pelicula") {
+      return (results as TmdbMovie[]).map(mapMovie);
+    }
+    return (results as TmdbTv[]).map(mapTv);
+  }
+
+  async obtenerPopulares(
+    tipo: "pelicula" | "serie",
+    limit = 20,
+    page = 1
+  ): Promise<ResultadoBusqueda[]> {
+    if (tipo !== "pelicula" && tipo !== "serie") {
+      throw new ValidationError(`TmdbAdapter no soporta tipo ${tipo}`);
+    }
+    const key = getTmdbKey();
+    const endpoint = tipo === "pelicula" ? "movie/popular" : "tv/popular";
+    const url = `${TMDB_BASE}/${endpoint}?language=es-ES&page=${page}`;
+
+    const res = await fetchWithTimeout(url, {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        Accept: "application/json",
+      },
+      timeoutMs: 5000,
+    });
+    assertOk(res, "TMDB populares");
+
+    const data = (await res.json()) as {
+      results?: unknown[];
+    };
+    const results = (data.results ?? []).slice(0, limit) as
       | TmdbMovie[]
       | TmdbTv[];
 

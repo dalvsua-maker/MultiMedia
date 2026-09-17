@@ -32,6 +32,12 @@ enum EstadoComparticion {
   rechazada
 }
 
+enum VotoRecomendacion {
+  me_gusta
+  no_me_gusta
+  ya_lo_vi
+}
+
 model Usuario {
   id                      String             @id @default(uuid()) @db.Uuid
   nombre                  String             @db.VarChar(100)
@@ -42,28 +48,34 @@ model Usuario {
   usuarioContenidos       UsuarioContenido[]
   comparticionesEnviadas  Comparticion[]     @relation("Origen")
   comparticionesRecibidas Comparticion[]     @relation("Destino")
+  historial               HistorialUsuarioContenido[]
+  feedbacks               RecomendacionFeedback[]
 
   @@map("usuarios")
 }
 
 model Contenido {
-  id                String             @id @default(uuid()) @db.Uuid
-  tipo              TipoContenido
-  titulo            String             @db.VarChar(255)
-  imagenUrl         String?            @map("imagen_url") @db.Text
-  fuenteExterna     FuenteExterna      @map("fuente_externa")
-  idExterno         String             @map("id_externo") @db.VarChar(100)
-  fechaAnadido      DateTime           @default(now()) @map("fecha_anadido") @db.Timestamptz
-  detallePelicula   DetallePelicula?
-  detalleSerie      DetalleSerie?
-  detalleVideojuego DetalleVideojuego?
-  detalleMusica     DetalleMusica?
-  listas            ListaContenido[]
-  usuarios          UsuarioContenido[]
-  comparticiones    Comparticion[]
+  id                  String             @id @default(uuid()) @db.Uuid
+  tipo                TipoContenido
+  titulo              String             @db.VarChar(255)
+  imagenUrl           String?            @map("imagen_url") @db.Text
+  fuenteExterna       FuenteExterna      @map("fuente_externa")
+  idExterno           String             @map("id_externo") @db.VarChar(100)
+  fechaAnadido        DateTime           @default(now()) @map("fecha_anadido") @db.Timestamptz
+  popularidadExterna  Float?             @map("popularidad_externa")
+  detallePelicula     DetallePelicula?
+  detalleSerie        DetalleSerie?
+  detalleVideojuego   DetalleVideojuego?
+  detalleMusica       DetalleMusica?
+  listas              ListaContenido[]
+  usuarios            UsuarioContenido[]
+  comparticiones      Comparticion[]
+  historiales         HistorialUsuarioContenido[]
+  feedbacks           RecomendacionFeedback[]
 
   @@unique([fuenteExterna, idExterno])
   @@index([tipo])
+  @@index([popularidadExterna])
   @@map("contenidos")
 }
 
@@ -157,4 +169,30 @@ model Comparticion {
   @@index([usuarioDestinoId, estado])
   @@unique([usuarioOrigenId, usuarioDestinoId, contenidoId], where: { estado: "pendiente" })
   @@map("comparticiones")
+}
+
+model HistorialUsuarioContenido {
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  contenidoId    String   @map("contenido_id") @db.Uuid
+  fechaAnadido   DateTime @default(now()) @map("fecha_anadido") @db.Timestamptz
+  fechaEliminado DateTime @default(now()) @map("fecha_eliminado") @db.Timestamptz
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido      Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, contenidoId])
+  @@index([usuarioId])
+  @@map("historial_usuario_contenido")
+}
+
+model RecomendacionFeedback {
+  usuarioId   String            @map("usuario_id") @db.Uuid
+  contenidoId String            @map("contenido_id") @db.Uuid
+  voto        VotoRecomendacion
+  fecha       DateTime          @default(now()) @map("fecha") @db.Timestamptz
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido   Contenido         @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, contenidoId])
+  @@index([usuarioId])
+  @@map("recomendacion_feedback")
 }

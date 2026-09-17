@@ -53,6 +53,7 @@ export default function MisContenidosPage() {
   const [filtro, setFiltro] = useState<Estado | "todos">("todos");
   const [pendingId, startTransition] = useTransition();
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [showAddToListModal, setShowAddToListModal] = useState<{
     open: boolean;
@@ -122,6 +123,34 @@ export default function MisContenidosPage() {
         setError((err as Error).message);
       } finally {
         setSavingId(null);
+      }
+    });
+  };
+
+  const eliminarContenido = (item: Item) => {
+    const ok = window.confirm(
+      `¿Eliminar "${item.contenido.titulo}" de Mis contenidos? Esta acción es definitiva y también lo quitará de todas tus listas.`
+    );
+    if (!ok) return;
+    const snapshot = items;
+    setItems((prev) => prev.filter((it) => it.contenido.id !== item.contenido.id));
+    setDeletingId(item.contenido.id);
+    setError(null);
+
+    startTransition(async () => {
+      try {
+        const res = await apiFetch(`/api/usuario-contenido/${item.contenido.id}`, {
+          method: "DELETE",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setItems(snapshot);
+          throw new Error((data as { error?: string }).error ?? "No se pudo eliminar el contenido");
+        }
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setDeletingId(null);
       }
     });
   };
@@ -274,6 +303,15 @@ export default function MisContenidosPage() {
                         Compartir
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => eliminarContenido(it)}
+                      disabled={deletingId === it.contenido.id || isSaving}
+                      className="w-full rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      {deletingId === it.contenido.id ? "Eliminando..." : "Eliminar de Mis contenidos"}
+                    </button>
                   </div>
                 </li>
               );

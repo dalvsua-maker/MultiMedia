@@ -58,6 +58,7 @@ interface SpotifyTrack {
   album: { images: { url: string }[]; name: string };
   artists: { name: string }[];
   duration_ms: number;
+  popularity: number;
 }
 
 export class SpotifyAdapter implements IExternalSearchService {
@@ -85,7 +86,9 @@ export class SpotifyAdapter implements IExternalSearchService {
       tracks?: { items: SpotifyTrack[] };
     };
     const items = data.tracks?.items ?? [];
-    return items.slice(0, 10).map((t) => ({
+    // Enriquecer con popularity via GET /v1/tracks (search no trae popularity con client_credentials)
+    const withPop = await this.enrichWithPopularity(items.slice(0, 10), token);
+    return withPop.map((t) => ({
       fuenteExterna: "spotify" as const,
       idExterno: t.id,
       tipo: "musica" as const,
@@ -95,8 +98,77 @@ export class SpotifyAdapter implements IExternalSearchService {
         artista: t.artists.map((a) => a.name).join(", "),
         album: t.album.name,
         duracionSeg: Math.round(t.duration_ms / 1000),
+        popularity: t.popularity,
       },
     }));
+  }
+
+  private async enrichWithPopularity(tracks: SpotifyTrack[], token: string): Promise<SpotifyTrack[]> {
+    if (tracks.length === 0) return tracks;
+    const ids = tracks.map((t) => t.id).join(",");
+    try {
+      const url = `https://api.spotify.com/v1/tracks?ids=${encodeURIComponent(ids)}`;
+      const res = await fetchWithTimeout(url, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        timeoutMs: 5000,
+      });
+      if (!res.ok) return tracks;
+      const data = (await res.json()) as { tracks?: SpotifyTrack[] };
+      const byId = new Map((data.tracks ?? []).map((t) => [t.id, t]));
+      return tracks.map((t) => byId.get(t.id) ?? t);
+    } catch {
+      return tracks;
+    }
+  }
+
+  async obtenerPopulares(limit = 20): Promise<ResultadoBusqueda[]> {
+    // Con client_credentials no se puede acceder a featured playlists (requiere user auth)
+    // Fallback: búsquedas genéricas por términos populares y mezclar resultados
+    const token = await getSpotifyToken();
+
+    const queries = ["Top Hits 2025", "Global Top 50", "Viral Hits"];
+    const seen = new Set<string>();
+    const resultados: ResultadoBusqueda[] = [];
+
+    for (const q of queries) {
+      if (resultados.length >= limit) break;
+      const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=10`;
+      const res = await fetchWithTimeout(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        timeoutMs: 5000,
+      });
+      try {
+        assertOk(res, "Spotify populares");
+      } catch {
+        continue;
+      }
+      const data = (await res.json()) as {
+        tracks?: { items: SpotifyTrack[] };
+      };
+      const items = await this.enrichWithPopularity(data.tracks?.items ?? [], token);
+      for (const t of items) {
+        if (seen.has(t.id)) continue;
+        seen.add(t.id);
+        resultados.push({
+          fuenteExterna: "spotify" as const,
+          idExterno: t.id,
+          tipo: "musica" as const,
+          titulo: t.name,
+          imagenUrl: t.album.images[0]?.url ?? null,
+          metadatos: {
+            artista: t.artists.map((a) => a.name).join(", "),
+            album: t.album.name,
+            duracionSeg: Math.round(t.duration_ms / 1000),
+            popularity: t.popularity,
+          },
+        });
+        if (resultados.length >= limit) break;
+      }
+    }
+    return resultados.slice(0, limit);
   }
 
   static _resetCache() {

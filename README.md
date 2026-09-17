@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Plataforma Contenidos — Next.js 16 + Prisma 7 + Neon
 
-## Getting Started
+Plataforma web para buscar/organizar/seguir/compartir contenidos (película, serie, videojuego, música) con listas temáticas, estados `pendiente → en_proceso → visto`, búsqueda unificada (TMDB/IGDB/Spotify), compartición con aceptar/rechazar y home con recomendaciones V2.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16 App Router** + TypeScript strict + Tailwind 4
+- **PostgreSQL (Neon)** + **Prisma 7.10** (`@prisma/adapter-pg`, `prisma.config.ts` con `DATABASE_URL` pooled / `DIRECT_URL` direct, `?sslmode=require`)
+- **DDD**: `src/domain`, `src/application`, `src/infrastructure` + Route Handlers `src/app/api/**/route.ts`
+- **Auth**: `bcryptjs` + `jsonwebtoken` — **Tests**: `vitest` (217 tests)
+
+## Catálogo
+
+360 contenidos reales (90 por tipo) con `popularidadExterna` (TMDB `popularity`, IGDB `total_rating`, Spotify `popularity`), `@@index([popularidadExterna])`. Seed: `npx tsx scripts/seed_popular_reales.ts` (pagina TMDB/IGDB/Spotify, dedup por `@@unique([fuenteExterna,idExterno])`).
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env # rellena DATABASE_URL, DIRECT_URL, JWT_SECRET, TMDB_API_KEY, IGDB_*, SPOTIFY_*
+npx prisma migrate deploy # usa DIRECT_URL
+npm run dev
+```
+
+Env dual Neon: `DATABASE_URL` (pooled, app/vitest) + `DIRECT_URL` (direct, migrate) — ver `scripts/neon-setup.md`.
+
+## Comandos
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run lint
+npm test              # 217 passed | 1 skipped (sin TMDB_API_KEY)
+npx tsx scripts/limpiar-fixtures.ts
+npx tsx scripts/seed_popular_reales.ts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API (resumen)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+POST   /api/auth/register | /api/auth/login
+GET    /api/contenidos/buscar?tipo=&q=          # UC1
+POST   /api/contenidos | GET /api/contenidos/:id
+GET    /api/contenidos/:id/publico
+GET    /api/usuarios/buscar?q=
+GET|POST /api/listas | GET /api/listas/:id
+POST   /api/listas/:id/contenidos | DELETE /api/listas/:id/contenidos/:cid
+GET    /api/usuario-contenido | PATCH /api/usuario-contenido/:cid | DELETE /api/usuario-contenido/:cid
+POST|GET /api/comparticiones | PATCH /api/comparticiones/:id
+GET    /api/inicio -> { enProceso, recomendaciones, recomendacionesPorTipo } # UC6 V2 4×4 + yaAnadido
+POST   /api/recomendaciones/feedback | DELETE /api/recomendaciones/feedback/:cid
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Ver `contexto-proyecto-plataforma-contenidos.md` (fuente canónica) y `AGENTS.md` (notas para agentes).
 
-## Learn More
+## Recomendaciones V2
 
-To learn more about Next.js, take a look at the following resources:
+Pool `TOP50` por `popularidadExterna` por tipo → `shuffle` → 4, excluye `usuario_contenido` + `feedback(no_me_gusta,ya_lo_vi)`, badge `Ya añadido` via `historial_usuario_contenido`, 3 votos con deshacer (toast único 5s, solo última).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Docs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `contexto-proyecto-plataforma-contenidos.md` — visión, UCs, contrato, schema completo
+- `AGENTS.md` — notas operativas breves
+- `docs/AUDITORIA-2026-09-10.md` — auditoría histórica
+- `docs/REDISENO-2026-09-17.md` — rediseño V2 (dummy → popularidad real, 360 catálogo, TOP50)
+- `CHANGELOG.md` — historial
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`npx prisma migrate deploy` con `DIRECT_URL`, luego `npm run build` (18 `ƒ Dynamic` + 6 `○ Static`).

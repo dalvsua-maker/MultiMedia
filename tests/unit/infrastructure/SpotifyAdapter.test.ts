@@ -65,6 +65,7 @@ describe("SpotifyAdapter (infra, con cache)", () => {
                 album: { name: "Album 1", images: [{ url: "https://img/1.jpg" }] },
                 artists: [{ name: "Artist A" }, { name: "Artist B" }],
                 duration_ms: 210_000,
+                popularity: 85,
               },
               {
                 id: "track2",
@@ -72,9 +73,36 @@ describe("SpotifyAdapter (infra, con cache)", () => {
                 album: { name: "Album 2", images: [] },
                 artists: [{ name: "Solo" }],
                 duration_ms: 180_000,
+                popularity: 70,
               },
             ],
           },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    // enrich con popularity (GET /v1/tracks?ids=...)
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tracks: [
+            {
+              id: "track1",
+              name: "Song 1",
+              album: { name: "Album 1", images: [{ url: "https://img/1.jpg" }] },
+              artists: [{ name: "Artist A" }, { name: "Artist B" }],
+              duration_ms: 210_000,
+              popularity: 85,
+            },
+            {
+              id: "track2",
+              name: "Song 2",
+              album: { name: "Album 2", images: [] },
+              artists: [{ name: "Solo" }],
+              duration_ms: 180_000,
+              popularity: 70,
+            },
+          ],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -97,13 +125,21 @@ describe("SpotifyAdapter (infra, con cache)", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          tracks: { items: [{ id: "track3", name: "Song 3", album: { name: "A", images: [] }, artists: [{ name: "X" }], duration_ms: 200000 }] },
+          tracks: { items: [{ id: "track3", name: "Song 3", album: { name: "A", images: [] }, artists: [{ name: "X" }], duration_ms: 200000, popularity: 60 }] },
+        }),
+        { status: 200 }
+      )
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tracks: [{ id: "track3", name: "Song 3", album: { name: "A", images: [] }, artists: [{ name: "X" }], duration_ms: 200000, popularity: 60 }],
         }),
         { status: 200 }
       )
     );
     const res2 = await adapter.search("musica", "beatles2");
-    expect(fetchMock).toHaveBeenCalledTimes(3); // token + search1 + search2
+    expect(fetchMock).toHaveBeenCalledTimes(5); // token + search1 + enrich1 + search2 + enrich2
     expect(res2).toHaveLength(1);
   });
 

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-17
+
+### Added
+- **Rediseño recomendaciones V2** (`RecomendacionServiceV2`): pool `TOP50` por `popularidadExterna` (TMDB `popularity`, IGDB `total_rating`, Spotify `popularity`) + `shuffle` → 4 por tipo ×4 tipos=16, afinidad por tipo se mantiene, `yaAnadido` via `historial_usuario_contenido` (badge sutil), 3 votos `me_gusta`/`no_me_gusta`/`ya_lo_vi` con exclusión dura y `DELETE` deshacer (toast único 5s, sin refetch, solo última acción deshacible)
+- **Catálogo real 360** (90×4): `scripts/seed_popular_reales.ts` pagina TMDB `/movie/popular`+`/tv/popular` (5 páginas) + IGDB `sort total_rating desc` con `offset` + Spotify múltiples `search` dedup, guarda `popularidadExterna` en `contenidos` + `@@index([popularidadExterna])` (migración `20250917000001_add_popularidad_externa`)
+- **Historial y feedback**: `HistorialUsuarioContenido` (upsert al `DELETE /api/usuario-contenido/:cid`) y `RecomendacionFeedback` (`VotoRecomendacion` enum) + migraciones `20250917000000_add_historial_y_feedback` (incluye fix índice parcial `comparticiones` BUG-01)
+- **Eliminar de Mis contenidos**: `DELETE /api/usuario-contenido/:cid` (transacción borra `usuario_contenido` + `listaContenido` del usuario + `historial` upsert), `EliminarUsuarioContenidoUseCase`, botones en `/mis-contenidos` (confirm + optimistic) y `/dashboard` `enProceso`
+- **Estado en listas**: `ObtenerListaDetalle` ahora incluye `estado` por contenido (`pendiente`/`en_proceso`/`visto`/`Sin estado`) + `PrismaListaRepository.findByIdWithContenidos` hace `LEFT JOIN` historial/estado
+- **Adapters**: `TmdbAdapter.obtenerPopulares(tipo, limit, page)` + `IgdbAdapter.obtenerPopulares(limit, offset)` con `total_rating` + `SpotifyAdapter.obtenerPopulares` con `enrichWithPopularity` (`GET /v1/tracks?ids=`) para `popularity` real (search no lo trae con `client_credentials`)
+- **Endpoints**: `POST /api/recomendaciones/feedback` + `DELETE /api/recomendaciones/feedback/:cid` + `GET /api/inicio` ahora devuelve `{ enProceso, recomendaciones, recomendacionesPorTipo }` con `yaAnadido` y `Cache-Control: no-store, dynamic='force-dynamic'`
+- **Dashboard**: 4 secciones por tipo, `RecomendacionCard` con `Ya añadido`, 3 botones voto + `Añadir`, shuffle cada carga, toast deshacer solo para `no_me_gusta`/`ya_lo_vi` (persiste inmediato, deshace borra feedback y reinserta local; `me_gusta` solo señal)
+- **Tests**: `PrismaRecomendacionServiceV2` (pool por `popularidadExterna`, 4×4, conjuntos parcialmente distintos, excluye feedback/historial) + `SpotifyAdapter` actualizado a 5 fetches (enrich)
+
+### Changed
+- **Popularidad ya no es dummy**: eliminado enfoque `usuario dummy seed-pop@test.com` con `usuario_contenido` simulado; ranking ahora 100% `popularidadExterna` real
+- **Catálogo**: de 13 → 360 reales, sin datos inventados `seed-`
+- **Recomendaciones**: de `V1` determinista `p.pop DESC` (10 flat, `JOIN usuario_contenido`) a `V2` aleatorio `TOP50` por `popularidadExterna` + `shuffle`
+
+### Fixed
+- **BUG-01** resuelto: índice parcial `comparticiones` ya migrado en `20250917000000`
+- **Spotify popularity**: `undefined` en `search` con `client_credentials` → ahora `enrichWithPopularity` vía `GET /v1/tracks?ids=`
+
+### Technical
+- Prisma: `VotoRecomendacion` enum + `Contenido.popularidadExterna Float?` + `HistorialUsuarioContenido` + `RecomendacionFeedback` + `migration_lock.toml`
+- `prisma.config.ts` ya usaba `DATABASE_URL ?? DIRECT_URL` (Neon pooled/direct)
+
 ## [0.1.0] - 2026-09-07
 
 ### Added

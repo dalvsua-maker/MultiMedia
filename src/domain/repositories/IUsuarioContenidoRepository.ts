@@ -28,4 +28,6 @@ export interface IUsuarioContenidoRepository {
     contenidoId: string,
     estado: EstadoContenido
   ): Promise<void>;
+
+  delete(usuarioId: string, contenidoId: string): Promise<void>;
 }

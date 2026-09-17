@@ -1,3 +1,5 @@
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import "dotenv/config";
 import { TmdbAdapter } from "../src/infrastructure/services/TmdbAdapter";
 import { IgdbAdapter } from "../src/infrastructure/services/IgdbAdapter";
@@ -61,3 +63,6 @@ main().catch((e) => {
   console.error("\n✗ Fallo adapters:", e);
   process.exit(1);
 });
+
+
+

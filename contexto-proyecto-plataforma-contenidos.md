@@ -15,7 +15,7 @@ Una plataforma web/multiplataforma donde los usuarios pueden **buscar, organizar
 * **Sistema de compartición**: Compartir contenidos directamente con otros usuarios, permitiendo aceptarlos o rechazarlos.
 * **Pantalla de inicio inteligente**: 
   * Bloque **"Continuar"**: Muestra rápidamente los contenidos que el usuario tiene `en_proceso`.
-  * Bloque **"Recomendado para ti"**: Motor de recomendación (v1: afinidad por tipo + popularidad) que sugiere nuevos contenidos **excluyendo** los que el usuario ya tiene en su cuenta (`pendiente`, `en_proceso`, `visto`).
+  * Bloque **"Recomendado para ti"**: Motor v2 (4 por tipo ×4 tipos=16, pool TOP50 por `popularidadExterna` + shuffle, afinidad por tipo, excluye poseídos/feedback `no_me_gusta`/`ya_lo_vi`, badge sutil `Ya añadido` si estuvo en historial).
 
 ---
 
@@ -69,7 +69,7 @@ Una plataforma web/multiplataforma donde los usuarios pueden **buscar, organizar
 * **UC3 — Crear y gestionar listas**: El usuario crea listas con nombre y descripción. Añade o elimina contenidos de sus listas.
 * **UC4 — Cambiar estado de contenido**: Usuario cambia el estado (`pendiente` -> `en_proceso` -> `visto`) de un contenido en su perfil (`usuario_contenido.estado`).
 * **UC5 — Compartir contenido**: Usuario A comparte un contenido a Usuario B. Se crea un registro en `comparticiones` con estado `pendiente`. Al aceptar, se vincula automáticamente al `usuario_contenido` del Usuario B como `pendiente`. Al rechazar, se marca como `rechazada`.
-* **UC6 — Pantalla de inicio**: Devuelve dos bloques: contenidos en `en_proceso` y recomendaciones basadas en el tipo de contenido más consumido + popularidad general, **excluyendo** los contenidos que el usuario ya tenga en cualquier estado (`pendiente`, `en_proceso`, `visto`).
+* **UC6 — Pantalla de inicio**: Devuelve dos bloques: contenidos en `en_proceso` y recomendaciones v2 (4 por tipo, pool TOP50 por `popularidadExterna` + shuffle, `yaAnadido` via historial, excluye poseídos + feedback `no_me_gusta`/`ya_lo_vi`, 3 votos `me_gusta`/`no_me_gusta`/`ya_lo_vi` con deshacer).
 
 ---
 
@@ -97,6 +97,7 @@ DELETE /api/listas/:id/contenidos/:cid -> Quitar contenido de lista
 -- Estado Personal de Contenidos
 GET    /api/usuario-contenido          -> Mis contenidos con su estado personal
 PATCH  /api/usuario-contenido/:cid     -> UC4: Actualizar estado (pendiente, en_proceso, visto)
+DELETE /api/usuario-contenido/:cid     -> UC4: Eliminar de Mis contenidos + listas + historial
 
 -- Comparticiones
 POST   /api/comparticiones             -> UC5: Compartir contenido con otro usuario
@@ -104,12 +105,14 @@ GET    /api/comparticiones             -> Obtener comparticiones recibidas/envia
 PATCH  /api/comparticiones/:id         -> Aceptar o rechazar compartición
 
 -- Inicio / Dashboard
-GET    /api/inicio                     -> UC6: Devuelve { enProceso: [...], recomendaciones: [...] }
+GET    /api/inicio                     -> UC6: Devuelve { enProceso: [...], recomendaciones: [...], recomendacionesPorTipo: { pelicula:[], serie:[], videojuego:[], musica:[] } }
+POST   /api/recomendaciones/feedback   -> UC6: Votar me_gusta/no_me_gusta/ya_lo_vi
+DELETE /api/recomendaciones/feedback/:cid -> UC6: Deshacer voto
 ```
 
 ---
 
-## 5. Esquema de Base de Datos Prisma (`prisma/schema.prisma`) — volcado literal verificado 2026-09-10
+## 5. Esquema de Base de Datos Prisma (`prisma/schema.prisma`) — volcado literal verificado 2026-09-17
 
 > Fuente literal: `prisma/schema.prisma` en disco (Prisma 7.10, `previewFeatures: ["partialIndexes"]`). `prisma.config.ts` define `datasource.url` via `defineConfig` con `DATABASE_URL ?? DIRECT_URL` (requiere `?sslmode=require` en Neon) — no duplicar `url` en schema.
 
@@ -148,6 +151,12 @@ enum EstadoComparticion {
   rechazada
 }
 
+enum VotoRecomendacion {
+  me_gusta
+  no_me_gusta
+  ya_lo_vi
+}
+
 model Usuario {
   id                      String             @id @default(uuid()) @db.Uuid
   nombre                  String             @db.VarChar(100)
@@ -158,28 +167,34 @@ model Usuario {
   usuarioContenidos       UsuarioContenido[]
   comparticionesEnviadas  Comparticion[]     @relation("Origen")
   comparticionesRecibidas Comparticion[]     @relation("Destino")
+  historial               HistorialUsuarioContenido[]
+  feedbacks               RecomendacionFeedback[]
 
   @@map("usuarios")
 }
 
 model Contenido {
-  id                String             @id @default(uuid()) @db.Uuid
-  tipo              TipoContenido
-  titulo            String             @db.VarChar(255)
-  imagenUrl         String?            @map("imagen_url") @db.Text
-  fuenteExterna     FuenteExterna      @map("fuente_externa")
-  idExterno         String             @map("id_externo") @db.VarChar(100)
-  fechaAnadido      DateTime           @default(now()) @map("fecha_anadido") @db.Timestamptz
-  detallePelicula   DetallePelicula?
-  detalleSerie      DetalleSerie?
-  detalleVideojuego DetalleVideojuego?
-  detalleMusica     DetalleMusica?
-  listas            ListaContenido[]
-  usuarios          UsuarioContenido[]
-  comparticiones    Comparticion[]
+  id                  String             @id @default(uuid()) @db.Uuid
+  tipo                TipoContenido
+  titulo              String             @db.VarChar(255)
+  imagenUrl           String?            @map("imagen_url") @db.Text
+  fuenteExterna       FuenteExterna      @map("fuente_externa")
+  idExterno           String             @map("id_externo") @db.VarChar(100)
+  fechaAnadido        DateTime           @default(now()) @map("fecha_anadido") @db.Timestamptz
+  popularidadExterna  Float?             @map("popularidad_externa")
+  detallePelicula     DetallePelicula?
+  detalleSerie        DetalleSerie?
+  detalleVideojuego   DetalleVideojuego?
+  detalleMusica       DetalleMusica?
+  listas              ListaContenido[]
+  usuarios            UsuarioContenido[]
+  comparticiones      Comparticion[]
+  historiales         HistorialUsuarioContenido[]
+  feedbacks           RecomendacionFeedback[]
 
   @@unique([fuenteExterna, idExterno])
   @@index([tipo])
+  @@index([popularidadExterna])
   @@map("contenidos")
 }
 
@@ -274,36 +289,62 @@ model Comparticion {
   @@unique([usuarioOrigenId, usuarioDestinoId, contenidoId], where: { estado: "pendiente" })
   @@map("comparticiones")
 }
+
+model HistorialUsuarioContenido {
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  contenidoId    String   @map("contenido_id") @db.Uuid
+  fechaAnadido   DateTime @default(now()) @map("fecha_anadido") @db.Timestamptz
+  fechaEliminado DateTime @default(now()) @map("fecha_eliminado") @db.Timestamptz
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido      Contenido @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, contenidoId])
+  @@index([usuarioId])
+  @@map("historial_usuario_contenido")
+}
+
+model RecomendacionFeedback {
+  usuarioId   String            @map("usuario_id") @db.Uuid
+  contenidoId String            @map("contenido_id") @db.Uuid
+  voto        VotoRecomendacion
+  fecha       DateTime          @default(now()) @map("fecha") @db.Timestamptz
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido   Contenido         @relation(fields: [contenidoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, contenidoId])
+  @@index([usuarioId])
+  @@map("recomendacion_feedback")
+}
 ```
 
-> Nota: `prisma/migrations/20250826000000_001_schema_inicial/migration.sql` (6154 bytes) es snapshot inicial sin el indice unico parcial `@@unique(..., where: { estado: "pendiente" })`. Pendiente generar migracion `add_partial_unique_comparticion_pendiente` (ver `docs/AUDITORIA-2026-09-10.md` BUG-01). `prisma/001_schema_inicial.sql` es fallback identico y tambien sin parche.
+> Nota: `prisma/migrations/20250826000000_001_schema_inicial` + `20250917000000_add_historial_y_feedback` + `20250917000001_add_popularidad_externa` (3 migraciones). `prisma/001_schema_inicial.sql` es fallback solo de C1, no incluye V2.
 
 ---
 
-## 6. Estado Actual del Proyecto — verificado 2026-09-10
+## 6. Estado Actual del Proyecto — verificado 2026-09-17
 
-### Estado Actual (auditoria 2026-09-10, `npm test && npm run lint && npm run build` en verde):
-* **UC1-UC6 verde — backend y frontend completos**. 16 Route Handlers `src/app/api/**/route.ts` + 18 use-cases `src/application/use-cases/**` + 5 `Prisma*Repository` + 3 adapters externos (TMDB/IGDB/Spotify `fetch 5s, limit 10`) + `RecomendacionServiceV1` (afinidad tipo + popularidad, excluye todo `usuario_contenido`).
-* **Stack:** Next.js 16.3.3 App Router + TypeScript strict + Tailwind 4 + Prisma 7.10 (`@prisma/client` 7.10, `prisma` 7.10, `@prisma/adapter-pg` + `pg`, `prisma.config.ts` con `defineConfig` + `partialIndexes`) + PostgreSQL Neon (`plataforma-contenidos-dev`, pooled `DATABASE_URL` / direct `DIRECT_URL` con `?sslmode=require`) + `bcryptjs` + `jsonwebtoken` + `vitest` 4.1.11.
-* **Verificado:** `npm test -- --run` → `26 passed / 214 passed | 1 skipped` (vitest), `npm run lint` → `0 warnings`, `npm run build` → `Compiled successfully` con 16 `ƒ Dynamic` + 7 `○ Static` (ver `docs/AUDITORIA-2026-09-10.md` tabla build). `npx prisma migrate status` → `1 migration found — Database schema is up to date!` con drift pendiente `@@unique` parcial (BUG-01).
-* **Páginas:** `/dashboard` (UC6 `GET /api/inicio`), `/buscar` (UC1+UC2), `/mis-contenidos` (UC4 con optimistic update), `/listas`, `/listas/:id` (UC3), `/comparticiones` (UC5 con toast), `/compartido/:id` (publico SIN auth), `/login`, `/register`.
+### Estado Actual (auditoria 2026-09-17, `npm test && npm run lint && npm run build` en verde):
+* **UC1-UC6 verde — backend y frontend completos + rediseño recomendaciones**. 18 Route Handlers `src/app/api/**/route.ts` + 22 use-cases `src/application/use-cases/**` + 5 `Prisma*Repository` + 3 adapters externos (TMDB/IGDB/Spotify `fetch 5s, limit 10`, `obtenerPopulares` paginado) + `RecomendacionServiceV2` (pool TOP50 por `popularidadExterna` + shuffle, 4×4=16, `yaAnadido` via `historial`, excluye `usuario_contenido` + `feedback`).
+* **Stack:** Next.js 16.3.3 App Router + TypeScript strict + Tailwind 4 + Prisma 7.10 (`@prisma/client` 7.10, `prisma` 7.10, `@prisma/adapter-pg` + `pg`, `prisma.config.ts` con `defineConfig` + `partialIndexes`) + PostgreSQL Neon (`plataforma-contenidos-dev`, pooled `DATABASE_URL` / direct `DIRECT_URL` con `?sslmode=require`, catálogo 360 reales 90×4 con `popularidadExterna` TMDB `popularity` / IGDB `total_rating` / Spotify `popularity`) + `bcryptjs` + `jsonwebtoken` + `vitest` 4.1.11.
+* **Verificado:** `npm test -- --run` → `27 passed / 217 passed | 1 skipped` (vitest, 3 nuevos V2), `npm run lint` → `0 errors, 14 warnings (eslint-disable)`, `npm run build` → `Compiled successfully` con 18 `ƒ Dynamic` + 6 `○ Static`. `npx prisma migrate status` → `3 migrations — Database schema is up to date!` (ver `docs/REDISENO-2026-09-17.md`).
+* **Páginas:** `/dashboard` (UC6 V2 4×4 con `yaAnadido`, 3 votos, `Añadir`, shuffle, `Deshacer`), `/buscar` (UC1+UC2), `/mis-contenidos` (UC4 con `DELETE` + confirm + listas + historial + filtros), `/listas`, `/listas/:id` (UC3 con `estado` por contenido), `/comparticiones` (UC5), `/compartido/:id` (público), `/login`, `/register`.
 
-| UC | Ruta | Use-case | Estado 2026-09-10 |
+| UC | Ruta | Use-case | Estado 2026-09-17 |
 |----|------|----------|-------------------|
-| UC1 | `GET /api/contenidos/buscar?tipo=&q=` | `BuscarContenidoUseCase` | verde |
-| UC2 | `POST /api/contenidos` + `GET /api/contenidos/:id` | `CrearContenido` + `ObtenerContenidoDetalle` | verde |
-| UC3 | `GET|POST /api/listas`, `GET /api/listas/:id`, `POST .../contenidos`, `DELETE .../:cid` | `CrearLista` etc. (5 use-cases) | verde |
-| UC4 | `GET /api/usuario-contenido` + `PATCH /api/usuario-contenido/:cid` | `Listar` + `ActualizarEstado` (retroceso libre) | verde |
-| UC5 | `GET /api/contenidos/:id/publico` (SIN auth) + `GET /api/usuarios/buscar` (auth) + `POST|GET /api/comparticiones` + `PATCH /api/comparticiones/:id` | `ObtenerPublico`, `BuscarUsuarios`, `Compartir` (200/201), `Responder` (`yaExistia`) | verde (con drift BUG-01) |
-| UC6 | `GET /api/inicio` | `ObtenerInicio` (`RecomendacionServiceV1`) | verde |
+| UC1 | `GET /api/contenidos/buscar?tipo=&q=` | `BuscarContenidoUseCase` (+ `obtenerPopulares` paginado en adapters) | verde |
+| UC2 | `POST /api/contenidos` + `GET /api/contenidos/:id` | `CrearContenido` + `ObtenerContenidoDetalle` (guarda `popularidadExterna`) | verde |
+| UC3 | `GET|POST /api/listas`, `GET /api/listas/:id`, `POST .../contenidos`, `DELETE .../:cid` | `CrearLista` etc. (5 use-cases) + `ObtenerListaDetalle` con `estado` | verde |
+| UC4 | `GET /api/usuario-contenido` + `PATCH /api/usuario-contenido/:cid` + `DELETE /api/usuario-contenido/:cid` | `Listar` + `ActualizarEstado` + `EliminarUsuarioContenido` (borra + listas + historial) | verde |
+| UC5 | `GET /api/contenidos/:id/publico` (SIN auth) + `GET /api/usuarios/buscar` (auth) + `POST|GET /api/comparticiones` + `PATCH /api/comparticiones/:id` | `ObtenerPublico`, `BuscarUsuarios`, `Compartir` (200/201), `Responder` (`yaExistia`) | verde |
+| UC6 | `GET /api/inicio` + `POST|DELETE /api/recomendaciones/feedback` | `ObtenerInicio` (`RecomendacionServiceV2` TOP50+shuffle 4×4, `yaAnadido`, `feedback` 3 votos) | verde V2 |
 | Auth | `POST /api/auth/register|login` | `Registrar`, `Login` | verde |
 
-### Pendiente / Riesgos (ver `docs/AUDITORIA-2026-09-10.md`):
-* **BUG-01 (Alta):** Falta migracion para `@@unique([usuarioOrigenId, usuarioDestinoId, contenidoId], where: { estado: "pendiente" })` — `migrate diff` muestra `CREATE UNIQUE INDEX ... WHERE`. Generar `npx prisma migrate dev --name add_partial_unique_comparticion_pendiente` y `migrate deploy` en Neon antes de proximo deploy.
-* **BUG-02 (Media):** `.git` no existe — inicializar `git init` para trazabilidad.
-* **BUG-03 (Media):** `prisma/001_schema_inicial.sql` fallback desincronizado (sin parche).
+### Pendiente / Riesgos:
+* **DONE 2026-09-17:** BUG-01 resuelto en `20250917000000_add_historial_y_feedback` (índice parcial `comparticiones` aplicado), catálogo ampliado 360 reales, `popularidadExterna` migrado, V2 con pool real TOP50 en vez de dummy `usuario_contenido`.
+* **INFO:** `prisma/001_schema_inicial.sql` sigue siendo snapshot C1 (no incluye V2), usar solo `prisma/migrations/` para deploy.
 
 ### Referencias:
 * Fuente canonica operativa breve: `AGENTS.md` (notas para agentes, contrato resumido, claves que rompen).
-* Historial: `CHANGELOG.md` `0.1.0` (2026-09-07, UC5 frontend) + `0.0.1` (2026-08-26, base).
-* Auditoria completa: `docs/AUDITORIA-2026-09-10.md` (3 secciones + hallazgos).
+* Historial: `CHANGELOG.md` `0.2.0` (2026-09-17, rediseño V2) + `0.1.0` (2026-09-07, UC5) + `0.0.1` (2026-08-26, base).
+* Rediseño: `docs/REDISENO-2026-09-17.md` (pool falso → popularidadExterna real, 360 catálogo, TOP50+shuffle).
+* Auditoria completa: `docs/AUDITORIA-2026-09-10.md` (histórica, 3 secciones + hallazgos).

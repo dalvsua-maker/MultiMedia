@@ -1,3 +1,5 @@
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import "dotenv/config";
 import jwt from "jsonwebtoken";
 import { NextRequest } from "next/server";
@@ -70,3 +72,6 @@ main().catch((e) => {
   console.error("\n✗ Endpoint fallo:", e);
   process.exit(1);
 });
+
+
+

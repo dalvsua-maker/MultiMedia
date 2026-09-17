@@ -82,6 +82,25 @@ export class PrismaUsuarioContenidoRepository implements IUsuarioContenidoReposi
       data: { estado, fechaActualizacion: new Date() },
     });
   }
+
+  async delete(usuarioId: string, contenidoId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.usuarioContenido.delete({
+        where: { usuarioId_contenidoId: { usuarioId, contenidoId } },
+      });
+      await tx.listaContenido.deleteMany({
+        where: {
+          contenidoId,
+          lista: { usuarioId },
+        },
+      });
+      await tx.historialUsuarioContenido.upsert({
+        where: { usuarioId_contenidoId: { usuarioId, contenidoId } },
+        create: { usuarioId, contenidoId },
+        update: { fechaEliminado: new Date() },
+      });
+    });
+  }
 }
 
 function mapDetalle(found: {

@@ -12,6 +12,7 @@ const mockUsuarioRepo = vi.hoisted(() => ({
 
 const mockRecoService = vi.hoisted(() => ({
   recomendar: vi.fn(),
+  recomendarAgrupado: vi.fn(),
 }));
 
 vi.mock("@/infrastructure/repositories/PrismaUsuarioContenidoRepository", () => ({
@@ -22,6 +23,12 @@ vi.mock("@/infrastructure/repositories/PrismaUsuarioContenidoRepository", () => 
 
 vi.mock("@/infrastructure/services/RecomendacionServiceV1", () => ({
   RecomendacionServiceV1: vi.fn(function () {
+    return mockRecoService;
+  }),
+}));
+
+vi.mock("@/infrastructure/services/RecomendacionServiceV2", () => ({
+  RecomendacionServiceV2: vi.fn(function () {
     return mockRecoService;
   }),
 }));
@@ -79,18 +86,24 @@ describe("GET /api/inicio (UC6)", () => {
         fechaActualizacion: new Date("2024-01-01T00:00:00.000Z"),
       },
     ]);
-    mockRecoService.recomendar.mockResolvedValue([
-      {
-        id: "r1",
-        tipo: "pelicula",
-        titulo: "PeliReco",
-        imagenUrl: null,
-        fuenteExterna: "tmdb",
-        idExterno: "999",
-        fechaAnadido: new Date("2024-01-03"),
-        detalle: null,
-      },
-    ]);
+    const recoItem = {
+      id: "r1",
+      tipo: "pelicula",
+      titulo: "PeliReco",
+      imagenUrl: null,
+      fuenteExterna: "tmdb",
+      idExterno: "999",
+      fechaAnadido: new Date("2024-01-03"),
+      detalle: null,
+      yaAnadido: false,
+    };
+    mockRecoService.recomendar.mockResolvedValue([recoItem]);
+    mockRecoService.recomendarAgrupado.mockResolvedValue({
+      pelicula: [recoItem],
+      serie: [],
+      videojuego: [],
+      musica: [],
+    });
   });
 
   it("200 con enProceso y recomendaciones", async () => {

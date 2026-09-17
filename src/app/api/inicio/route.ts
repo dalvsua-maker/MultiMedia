@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObtenerInicioUseCase } from "@/application/use-cases/ObtenerInicio";
 import { PrismaUsuarioContenidoRepository } from "@/infrastructure/repositories/PrismaUsuarioContenidoRepository";
-import { RecomendacionServiceV1 } from "@/infrastructure/services/RecomendacionServiceV1";
+import { RecomendacionServiceV2 } from "@/infrastructure/services/RecomendacionServiceV2";
 import { AppError } from "@/application/errors/AppError";
 import { getAuthenticatedUserId } from "@/app/api/_helpers/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const usuarioId = getAuthenticatedUserId(request);
     const usuarioRepo = new PrismaUsuarioContenidoRepository();
-    const recoService = new RecomendacionServiceV1();
+    const recoService = new RecomendacionServiceV2();
     const useCase = new ObtenerInicioUseCase(usuarioRepo, recoService);
     const result = await useCase.execute(usuarioId);
-    return NextResponse.json(result, { status: 200 });
+    const res = NextResponse.json(result, { status: 200 });
+    res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res;
   } catch (error) {
     if (error instanceof AppError) {
       return NextResponse.json(

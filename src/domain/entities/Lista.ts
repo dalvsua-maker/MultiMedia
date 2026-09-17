@@ -46,5 +46,6 @@ export interface ListaConContenidos extends ListaProps {
     fuenteExterna: string;
     idExterno: string;
     fechaAnadido: Date;
+    estado: string | null;
   }[];
 }

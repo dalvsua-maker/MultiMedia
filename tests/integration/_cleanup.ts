@@ -7,6 +7,12 @@ const idExternoOr = FIXTURE_ID_EXTERNO_PREFIXES.map((p) => ({ idExterno: { start
 const emailOr = FIXTURE_EMAIL_DOMAINS.map((d) => ({ email: { endsWith: d } }));
 
 export async function cleanupFixtures(prisma: PrismaClient): Promise<void> {
+  await prisma.recomendacionFeedback.deleteMany({
+    where: { contenido: { OR: idExternoOr } },
+  });
+  await prisma.historialUsuarioContenido.deleteMany({
+    where: { contenido: { OR: idExternoOr } },
+  });
   await prisma.listaContenido.deleteMany({
     where: { contenido: { OR: idExternoOr } },
   });

@@ -19,6 +19,19 @@ type Contenido = {
   fuenteExterna: string;
   idExterno: string;
   fechaAnadido: string;
+  estado: string | null;
+};
+
+const ESTADO_LABEL: Record<string, string> = {
+  pendiente: "Pendiente",
+  en_proceso: "En proceso",
+  visto: "Visto",
+};
+
+const ESTADO_CLASSES: Record<string, string> = {
+  pendiente: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  en_proceso: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  visto: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
 };
 
 type Lista = {
@@ -232,7 +245,23 @@ export default function ListaDetallePage() {
                     </div>
                   )}
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <h3 className="truncate text-sm font-semibold">{c.titulo}</h3>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="truncate text-sm font-semibold">{c.titulo}</h3>
+                      {c.estado ? (
+                        <span
+                          className={
+                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide " +
+                            (ESTADO_CLASSES[c.estado] ?? "bg-zinc-100 text-zinc-600")
+                          }
+                        >
+                          {ESTADO_LABEL[c.estado] ?? c.estado}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                          Sin estado
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-zinc-500">
                       {c.tipo} · {c.fuenteExterna}
                     </p>
@@ -245,7 +274,7 @@ export default function ListaDetallePage() {
                         disabled={removingId === c.id}
                         className="w-fit rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
                       >
-                        {removingId === c.id ? "Quitando..." : "Quitar"}
+                        {removingId === c.id ? "Quitando..." : "Quitar de lista"}
                       </button>
                     </div>
                   </div>

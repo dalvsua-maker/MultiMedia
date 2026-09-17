@@ -33,6 +33,7 @@ export class ObtenerListaDetalleUseCase {
         fuenteExterna: c.fuenteExterna,
         idExterno: c.idExterno,
         fechaAnadido: c.fechaAnadido.toISOString(),
+        estado: c.estado ?? null,
       })),
     };
   }

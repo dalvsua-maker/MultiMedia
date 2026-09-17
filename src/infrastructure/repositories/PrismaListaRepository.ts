@@ -58,6 +58,15 @@ export class PrismaListaRepository implements IListaRepository {
     });
     if (!found) return null;
 
+    const contenidoIds = found.contenidos.map((lc) => lc.contenido.id);
+    const estados = contenidoIds.length
+      ? await prisma.usuarioContenido.findMany({
+          where: { usuarioId: found.usuarioId, contenidoId: { in: contenidoIds } },
+          select: { contenidoId: true, estado: true },
+        })
+      : [];
+    const estadoMap = new Map(estados.map((e) => [e.contenidoId, e.estado]));
+
     return {
       id: found.id,
       usuarioId: found.usuarioId,
@@ -72,6 +81,7 @@ export class PrismaListaRepository implements IListaRepository {
         fuenteExterna: lc.contenido.fuenteExterna,
         idExterno: lc.contenido.idExterno,
         fechaAnadido: lc.fechaAnadido,
+        estado: (estadoMap.get(lc.contenido.id) as string | undefined) ?? null,
       })),
     };
   }

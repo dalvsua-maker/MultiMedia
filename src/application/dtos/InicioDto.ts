@@ -10,4 +10,5 @@ export interface InicioEnProcesoDto {
 export interface InicioResponseDto {
   enProceso: InicioEnProcesoDto[];
   recomendaciones: ContenidoDto[];
+  recomendacionesPorTipo: Record<string, (ContenidoDto & { yaAnadido: boolean })[]>;
 }

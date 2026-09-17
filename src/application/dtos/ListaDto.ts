@@ -20,6 +20,7 @@ export interface ListaDetalleDto extends ListaDto {
     fuenteExterna: string;
     idExterno: string;
     fechaAnadido: string;
+    estado: string | null;
   }[];
 }
 
