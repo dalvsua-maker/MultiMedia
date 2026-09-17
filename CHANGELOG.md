@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-18
+
+### Fixed
+- **Dashboard — “Añadir a Mis contenidos”** (`src/app/dashboard/page.tsx:203`): `handleAddRecomendacion` asumía respuesta `GET /api/contenidos/:id/publico` con wrapper `{contenido: {...}}` (patrón de `GET /api/contenidos/:id`) pero `ObtenerContenidoPublicoUseCase`/`src/app/api/contenidos/[id]/publico/route.ts:14` devuelve objeto plano `ContenidoPublicoDto` `{id, titulo, tipo, fuenteExterna, idExterno, detalle}` (consumo correcto en `src/app/compartido/[id]/page.tsx:66` y test `tests/api/uc5-comparticiones.test.ts:101`). El check `!detail?.contenido` siempre fallaba → mensaje “No se pudo obtener detalle del contenido”. Fix: `const c = detail?.contenido ?? detail; if (!detailRes.ok || !c?.id) throw ...` + `detalle: c.detalle ?? null` (compatible plano y legacy wrapper). Verificado `npm test` 217 passed | 1 skipped, `npm run build` OK, `npm run lint` 0 errores en `src/`.
+
 ## [0.2.0] - 2026-09-17
 
 ### Added

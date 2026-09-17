@@ -205,8 +205,8 @@ export default function DashboardPage() {
     try {
       const detailRes = await apiFetch(`/api/contenidos/${card.id}/publico`);
       const detail = await detailRes.json().catch(() => null);
-      if (!detailRes.ok || !detail?.contenido) throw new Error("No se pudo obtener detalle del contenido");
-      const c = detail.contenido;
+      const c = detail?.contenido ?? detail;
+      if (!detailRes.ok || !c?.id) throw new Error("No se pudo obtener detalle del contenido");
       const createRes = await apiFetch("/api/contenidos", {
         method: "POST",
         body: JSON.stringify({
@@ -215,7 +215,7 @@ export default function DashboardPage() {
           imagenUrl: c.imagenUrl,
           fuenteExterna: c.fuenteExterna,
           idExterno: c.idExterno,
-          detalle: c.detalle,
+          detalle: c.detalle ?? null,
         }),
       });
       const createData = await createRes.json();
