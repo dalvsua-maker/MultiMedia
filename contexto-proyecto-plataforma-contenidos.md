@@ -76,9 +76,11 @@ Una plataforma web/multiplataforma donde los usuarios pueden **buscar, organizar
 ## 4. Contrato de la API REST
 
 ```http
--- Autenticación
-POST   /api/auth/register              -> Registro de usuario
-POST   /api/auth/login                 -> Inicio de sesión, devuelve JWT
+-- Autenticación (cookies httpOnly, Bearer deprecated para compat)
+POST   /api/auth/register              -> Registro, setea cookies httpOnly token (15m, /) + refresh_token (7d, /api/auth/refresh), devuelve {usuario}
+POST   /api/auth/login                 -> Login, setea cookies httpOnly token (15m) + refresh_token (7d), devuelve {usuario}
+POST   /api/auth/refresh               -> Rota access token vía cookie refresh_token (httpOnly, path /api/auth/refresh), setea nuevo token
+DELETE /api/auth/logout                -> Limpia cookies token + refresh_token (también POST por compat)
 
 -- Contenidos y Búsqueda
 GET    /api/contenidos/buscar?tipo=&q= -> UC1: Buscar en APIs externas

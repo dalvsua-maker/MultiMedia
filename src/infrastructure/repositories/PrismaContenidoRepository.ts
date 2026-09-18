@@ -83,67 +83,86 @@ export class PrismaContenidoRepository implements IContenidoRepository {
   }
 
   async create(data: CrearContenidoData): Promise<Contenido> {
-    const created = await prisma.$transaction(async (tx) => {
-      const contenido = await tx.contenido.create({
-        data: {
-          tipo: data.tipo,
-          titulo: data.titulo,
-          imagenUrl: data.imagenUrl ?? null,
-          fuenteExterna: data.fuenteExterna,
-          idExterno: data.idExterno,
-        },
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const contenido = await tx.contenido.create({
+          data: {
+            tipo: data.tipo,
+            titulo: data.titulo,
+            imagenUrl: data.imagenUrl ?? null,
+            fuenteExterna: data.fuenteExterna,
+            idExterno: data.idExterno,
+          },
+        });
+
+        if (data.detalle) {
+          const d = data.detalle as Record<string, unknown>;
+          switch (data.tipo) {
+            case "pelicula":
+              await tx.detallePelicula.create({
+                data: {
+                  contenidoId: contenido.id,
+                  duracionMin: (d.duracionMin as number) ?? null,
+                  director: (d.director as string) ?? null,
+                  anio: (d.anio as number) ?? null,
+                },
+              });
+              break;
+            case "serie":
+              await tx.detalleSerie.create({
+                data: {
+                  contenidoId: contenido.id,
+                  numTemporadas: (d.numTemporadas as number) ?? null,
+                  numEpisodios: (d.numEpisodios as number) ?? null,
+                  anioInicio: (d.anioInicio as number) ?? null,
+                },
+              });
+              break;
+            case "videojuego":
+              await tx.detalleVideojuego.create({
+                data: {
+                  contenidoId: contenido.id,
+                  plataformas: (d.plataformas as string[]) ?? [],
+                  desarrollador: (d.desarrollador as string) ?? null,
+                  anioLanzamiento: (d.anioLanzamiento as number) ?? null,
+                },
+              });
+              break;
+            case "musica":
+              await tx.detalleMusica.create({
+                data: {
+                  contenidoId: contenido.id,
+                  artista: (d.artista as string) ?? null,
+                  album: (d.album as string) ?? null,
+                  duracionSeg: (d.duracionSeg as number) ?? null,
+                },
+              });
+              break;
+          }
+        }
+
+        return contenido;
       });
 
-      if (data.detalle) {
-        const d = data.detalle as Record<string, unknown>;
-        switch (data.tipo) {
-          case "pelicula":
-            await tx.detallePelicula.create({
-              data: {
-                contenidoId: contenido.id,
-                duracionMin: (d.duracionMin as number) ?? null,
-                director: (d.director as string) ?? null,
-                anio: (d.anio as number) ?? null,
-              },
-            });
-            break;
-          case "serie":
-            await tx.detalleSerie.create({
-              data: {
-                contenidoId: contenido.id,
-                numTemporadas: (d.numTemporadas as number) ?? null,
-                numEpisodios: (d.numEpisodios as number) ?? null,
-                anioInicio: (d.anioInicio as number) ?? null,
-              },
-            });
-            break;
-          case "videojuego":
-            await tx.detalleVideojuego.create({
-              data: {
-                contenidoId: contenido.id,
-                plataformas: (d.plataformas as string[]) ?? [],
-                desarrollador: (d.desarrollador as string) ?? null,
-                anioLanzamiento: (d.anioLanzamiento as number) ?? null,
-              },
-            });
-            break;
-          case "musica":
-            await tx.detalleMusica.create({
-              data: {
-                contenidoId: contenido.id,
-                artista: (d.artista as string) ?? null,
-                album: (d.album as string) ?? null,
-                duracionSeg: (d.duracionSeg as number) ?? null,
-              },
-            });
-            break;
-        }
+      return toContenido(created);
+    } catch (e: unknown) {
+      const err = e as { code?: string; meta?: { target?: unknown } };
+      // P2002 unique violation on (fuenteExterna, idExterno) — race: another request inserted concurrently
+      // Dejar que el use-case maneje la deduplicación con yaExistia:true para preservar contrato idempotente.
+      // Aquí solo verificamos que el existente es recuperable, luego re-lanzamos para que el use-case haga fallback.
+      if (err?.code === "P2002") {
+        const existente = await prisma.contenido.findUnique({
+          where: {
+            fuenteExterna_idExterno: {
+              fuenteExterna: data.fuenteExterna,
+              idExterno: data.idExterno,
+            },
+          },
+        });
+        if (existente) throw e;
       }
-
-      return contenido;
-    });
-
-    return toContenido(created);
+      throw e;
+    }
   }
 }
 

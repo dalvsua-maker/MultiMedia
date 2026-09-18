@@ -3,9 +3,11 @@ import { BuscarContenidoUseCase } from "@/application/use-cases/BuscarContenido"
 import { ExternalSearchService } from "@/infrastructure/services/ExternalSearchService";
 import { AppError } from "@/application/errors/AppError";
 import { getAuthenticatedUserId } from "@/app/api/_helpers/auth";
+import { checkBuscarRateLimit } from "@/app/api/_helpers/rateLimit";
 
 export async function GET(request: NextRequest) {
   try {
+    checkBuscarRateLimit(request);
     // Auth requerida (igual que /api/listas)
     getAuthenticatedUserId(request);
 

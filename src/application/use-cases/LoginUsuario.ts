@@ -1,16 +1,8 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { signAccess } from "@/infrastructure/auth/jwt";
 import { IUsuarioRepository } from "@/domain/repositories/IUsuarioRepository";
 import { LoginDto, AuthResponseDto } from "@/application/dtos/AuthDto";
 import { UnauthorizedError, ValidationError } from "@/application/errors/AppError";
-
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "7d";
-
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET no configurado");
-  return secret;
-}
 
 export class LoginUsuarioUseCase {
   constructor(private readonly usuarioRepo: IUsuarioRepository) {}
@@ -32,11 +24,7 @@ export class LoginUsuarioUseCase {
       throw new UnauthorizedError("Credenciales no válidas");
     }
 
-    const token = jwt.sign(
-      { sub: usuario.id, email: usuario.email },
-      getJwtSecret(),
-      { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
-    );
+    const token = signAccess({ sub: usuario.id, email: usuario.email });
 
     return {
       usuario: {

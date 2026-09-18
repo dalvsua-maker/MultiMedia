@@ -1,16 +1,25 @@
+// Deprecated: token now lives in httpOnly cookie, not localStorage
 export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  return null;
 }
 
-export function setAuth(token: string, usuario: unknown) {
-  localStorage.setItem("token", token);
-  localStorage.setItem("usuario", JSON.stringify(usuario));
+export function setAuth(_token: string | null, usuario: unknown) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("usuario", JSON.stringify(usuario));
+  }
+}
+
+export function setUsuario(usuario: unknown) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("usuario", JSON.stringify(usuario));
+  }
 }
 
 export function clearAuth() {
-  localStorage.removeItem("token");
-  localStorage.removeItem("usuario");
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+  }
 }
 
 export function getUsuario(): { id: string; nombre: string; email: string } | null {
@@ -25,12 +34,12 @@ export function getUsuario(): { id: string; nombre: string; email: string } | nu
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
-  const token = getToken();
   const headers = new Headers(init.headers as HeadersInit);
-  headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (!(init.body instanceof FormData)) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  }
 
-  const res = await fetch(path, { ...init, headers });
+  const res = await fetch(path, { ...init, headers, credentials: "include" });
 
   if (res.status === 401) {
     clearAuth();

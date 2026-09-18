@@ -63,7 +63,7 @@ export class CrearContenidoUseCase {
       }
     }
 
-    // Buscar contenido global por @@unique
+    // Buscar contenido global por @@unique — con handling de race P2002
     let contenido = await this.contenidoRepo.findByFuenteExternaAndIdExterno(
       dto.fuenteExterna as FuenteExterna,
       dto.idExterno
@@ -73,20 +73,42 @@ export class CrearContenidoUseCase {
     let contenidoConDetalle: ContenidoDto["detalle"] = null;
 
     if (!contenido) {
-      // Crear contenido + detalle (transacción en repo)
-      contenido = await this.contenidoRepo.create({
-        tipo: dto.tipo as TipoContenido,
-        titulo: dto.titulo.trim(),
-        imagenUrl: dto.imagenUrl ?? null,
-        fuenteExterna: dto.fuenteExterna as FuenteExterna,
-        idExterno: dto.idExterno,
-        detalle: dto.detalle ?? null,
-      });
-      // Mapear detalle para respuesta
-      contenidoConDetalle = dto.detalle
-        ? ({ _tipo: dto.tipo, ...(dto.detalle as Record<string, unknown>) } as ContenidoDto["detalle"])
-        : null;
-      yaExistia = false;
+      try {
+        // Crear contenido + detalle (transacción en repo)
+        contenido = await this.contenidoRepo.create({
+          tipo: dto.tipo as TipoContenido,
+          titulo: dto.titulo.trim(),
+          imagenUrl: dto.imagenUrl ?? null,
+          fuenteExterna: dto.fuenteExterna as FuenteExterna,
+          idExterno: dto.idExterno,
+          detalle: dto.detalle ?? null,
+        });
+        // Mapear detalle para respuesta
+        contenidoConDetalle = dto.detalle
+          ? ({ _tipo: dto.tipo, ...(dto.detalle as Record<string, unknown>) } as ContenidoDto["detalle"])
+          : null;
+        yaExistia = false;
+      } catch (e: unknown) {
+        const err = e as { code?: string; meta?: { target?: string[] } };
+        const isP2002 =
+          err?.code === "P2002" ||
+          (Array.isArray(err?.meta?.target) &&
+            err.meta.target.some((t) => t.includes("fuenteExterna") || t.includes("idExterno")));
+        if (isP2002) {
+          // Race: otro request creó el mismo contenido entre find y create → reutilizar
+          const existente = await this.contenidoRepo.findByFuenteExternaAndIdExterno(
+            dto.fuenteExterna as FuenteExterna,
+            dto.idExterno
+          );
+          if (!existente) throw e;
+          contenido = existente;
+          yaExistia = true;
+          const conDetalle = await this.contenidoRepo.findByIdConDetalle(contenido.id);
+          contenidoConDetalle = conDetalle?.detalle ?? null;
+        } else {
+          throw e;
+        }
+      }
     } else {
       yaExistia = true;
       // Si ya existía, recuperar detalle para respuesta
